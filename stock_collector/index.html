@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Agents — A2A Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c0f;--surface:#0f1318;--surface2:#161c24;--border:#1e2530;
+  --text:#e2e8f0;--muted:#4a5568;--dim:#2d3748;
+  --amber:#f5a623;--amber-dim:#3a2a10;--amber-border:#4a3a20;
+  --green:#48bb78;--green-dim:#1a3a2a;--green-border:#2a4a3a;
+  --red:#fc8181;--red-dim:#3a1a1a;--red-border:#4a2a2a;
+  --blue:#63b3ed;--blue-dim:#1a2a3a;--blue-border:#2a3a4a;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif}
+body{display:flex;flex-direction:column;overflow-x:hidden}
+
+.header{padding:1.25rem 2rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{width:36px;height:36px;background:var(--amber);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:#0a0c0f;flex-shrink:0}
+.logo-name{font-size:15px;font-weight:500;color:var(--text)}
+.logo-sub{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-top:1px;font-family:'Space Mono',monospace}
+.guard-badge{display:flex;align-items:center;gap:6px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 12px}
+.guard-dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+
+.main{flex:1;padding:2rem;max-width:1100px;margin:0 auto;width:100%}
+
+.input-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.75rem}
+.input-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:0.75rem;font-family:'Space Mono',monospace}
+.input-row{display:flex;gap:10px}
+.input-field{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0.75rem 1rem;font-size:14px;color:var(--text);font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.2s}
+.input-field:focus{border-color:var(--amber)}
+.input-field::placeholder{color:var(--dim)}
+.run-btn{background:var(--amber);color:#0a0c0f;border:none;border-radius:8px;padding:0.75rem 1.5rem;font-size:12px;font-weight:700;font-family:'Space Mono',monospace;cursor:pointer;letter-spacing:0.5px;transition:opacity 0.2s;white-space:nowrap}
+.run-btn:hover{opacity:0.9}
+.run-btn:disabled{opacity:0.4;cursor:not-allowed}
+
+.pipeline{display:flex;flex-direction:column;gap:12px;margin-bottom:1.75rem}
+
+
+.stage{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color 0.3s}
+.stage.active{border-color:var(--amber-border)}
+.stage.complete{border-color:#2a4a3a}
+.stage.blocked{border-color:var(--red-border)}
+
+.stage-header{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.stage-meta{flex:1}
+.stage-tag{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:3px}
+.stage-tag.guarded{color:var(--amber)}
+.stage-name{font-size:14px;font-weight:500;color:var(--text)}
+.stage-dot{width:9px;height:9px;border-radius:50%;background:var(--dim);transition:all 0.3s;flex-shrink:0}
+.stage.active .stage-dot{background:var(--amber);box-shadow:0 0 8px #f5a62366}
+.stage.complete .stage-dot{background:var(--green)}
+.stage.blocked .stage-dot{background:var(--red)}
+
+.stage-body{padding:1.25rem;min-height:160px}
+
+.placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;height:120px;gap:8px;opacity:0.25}
+.placeholder-icon{font-size:22px}
+.placeholder-text{font-family:'Space Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:0.5px}
+
+.loading{display:flex;align-items:center;gap:10px;padding:1rem 0}
+.spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted)}
+
+.ticker-list{display:flex;flex-direction:column;gap:8px}
+.ticker-item{display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:6px;padding:10px 14px;border:1px solid var(--border)}
+.ticker-sym{font-family:'Space Mono',monospace;font-size:14px;font-weight:700;color:var(--amber)}
+.ticker-label{font-size:11px;color:var(--muted);margin-top:1px}
+.ticker-badge{font-family:'Space Mono',monospace;font-size:9px;background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:3px 7px;border-radius:4px;letter-spacing:0.5px}
+
+.analysis-list{display:flex;flex-direction:column;gap:12px}
+.analysis-item{padding-bottom:12px;border-bottom:1px solid var(--border)}
+.analysis-item:last-child{border-bottom:none;padding-bottom:0}
+.analysis-sym{font-family:'Space Mono',monospace;font-size:11px;color:var(--amber);margin-bottom:4px;letter-spacing:0.5px}
+.analysis-text{font-size:12px;color:#718096;line-height:1.65}
+
+.rec-list{display:flex;flex-direction:column;gap:10px}
+.rec-item{display:flex;align-items:center;gap:10px;background:var(--surface2);border-radius:6px;padding:10px 12px;border:1px solid var(--border)}
+.rec-sym{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text);width:44px;flex-shrink:0}
+.rec-badge{font-family:'Space Mono',monospace;font-size:10px;font-weight:700;padding:3px 9px;border-radius:4px;letter-spacing:0.5px;flex-shrink:0}
+.badge-buy{background:var(--green-dim);color:var(--green);border:1px solid var(--green-border)}
+.badge-hold{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber-border)}
+.badge-sell{background:var(--red-dim);color:var(--red);border:1px solid var(--red-border)}
+.rec-reason{font-size:11px;color:var(--muted);line-height:1.5;flex:1}
+.rec-conf{font-family:'Space Mono',monospace;font-size:10px;color:var(--dim);flex-shrink:0}
+
+.metrics-bar{margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.metrics-title{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.trust-score{font-family:'Space Mono',monospace;font-size:18px;font-weight:700;color:var(--amber)}
+.trust-score.high{color:var(--green)}
+.trust-score.low{color:var(--red)}
+.metrics-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.metric-item{background:var(--surface2);border-radius:6px;padding:8px 10px;border:1px solid var(--border)}
+.metric-label{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:0.5px;margin-bottom:3px}
+.metric-value{font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:var(--text)}
+.metric-bar{height:3px;background:var(--border);border-radius:2px;margin-top:5px;overflow:hidden}
+.metric-fill{height:100%;border-radius:2px;background:var(--green);transition:width 0.6s ease}
+.metric-fill.warn{background:var(--amber)}
+.metric-fill.danger{background:var(--red)}
+
+.violation-banner{background:var(--red-dim);border:1px solid var(--red-border);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.violation-icon{font-size:16px}
+.violation-text{font-family:'Space Mono',monospace;font-size:11px;color:var(--red);line-height:1.5}
+
+.log-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.log-header{padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.log-title{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.log-clear{font-family:'Space Mono',monospace;font-size:10px;color:var(--dim);background:none;border:none;cursor:pointer;padding:0}
+.log-clear:hover{color:var(--muted)}
+.log-body{padding:1rem 1.25rem;font-family:'Space Mono',monospace;font-size:11px;line-height:2;max-height:180px;overflow-y:auto}
+.log-entry{display:flex;gap:12px}
+.log-time{color:var(--dim);flex-shrink:0}
+.log-info{color:#3182ce}
+.log-success{color:var(--green)}
+.log-error{color:var(--red)}
+.log-warn{color:var(--amber)}
+.log-msg{color:#718096}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">
+    <div class="logo-mark">SA</div>
+    <div>
+      <div class="logo-name">Stock Agents</div>
+      <div class="logo-sub">A2A Pipeline · Tumeryk Guard</div>
+    </div>
+  </div>
+  <div class="guard-badge">
+    <div class="guard-dot"></div>
+    GUARD CONNECTED
+  </div>
+</div>
+
+<div class="main">
+  <div class="input-card">
+    <div class="input-label">Analyze a sector or topic</div>
+    <div class="input-row">
+      <input class="input-field" id="topic-input" placeholder="e.g. electric vehicles, semiconductor stocks, AI infrastructure..." />
+      <button class="run-btn" id="run-btn" onclick="runPipeline()">RUN →</button>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    <div class="stage" id="stage-collector">
+      <div class="stage-header">
+        <div class="stage-meta">
+          <div class="stage-tag">STAGE 01 · EXTERNAL</div>
+          <div class="stage-name">Stock Collector</div>
+        </div>
+        <div class="stage-dot"></div>
+      </div>
+      <div class="stage-body" id="body-collector">
+        <div class="placeholder">
+          <div class="placeholder-icon">◎</div>
+          <div class="placeholder-text">AWAITING TOPIC</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="stage-research">
+      <div class="stage-header">
+        <div class="stage-meta">
+          <div class="stage-tag guarded">STAGE 02 · GUARDED</div>
+          <div class="stage-name">Research Analyst</div>
+        </div>
+        <div class="stage-dot"></div>
+      </div>
+      <div class="stage-body" id="body-research">
+        <div class="placeholder">
+          <div class="placeholder-icon">◎</div>
+          <div class="placeholder-text">AWAITING TICKERS</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" id="stage-decision">
+      <div class="stage-header">
+        <div class="stage-meta">
+          <div class="stage-tag guarded">STAGE 03 · GUARDED</div>
+          <div class="stage-name">Decision Maker</div>
+        </div>
+        <div class="stage-dot"></div>
+      </div>
+      <div class="stage-body" id="body-decision">
+        <div class="placeholder">
+          <div class="placeholder-icon">◎</div>
+          <div class="placeholder-text">AWAITING ANALYSIS</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <div class="log-header">
+      <div class="log-title">Pipeline Log</div>
+      <button class="log-clear" onclick="clearLog()">CLEAR</button>
+    </div>
+    <div class="log-body" id="log-body">
+    </div>
+  </div>
+</div>
+
+<script>
+function ts() {
+  return new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function log(msg, level='info') {
+  const body = document.getElementById('log-body');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.innerHTML = '<span class="log-time">'+ts()+'</span><span class="log-'+level+'">'+level.toUpperCase().padEnd(7)+'</span><span class="log-msg">'+msg+'</span>';
+  body.appendChild(entry);
+  body.scrollTop = body.scrollHeight;
+}
+
+function clearLog() {
+  document.getElementById('log-body').innerHTML = '';
+}
+
+function setStage(id, state) {
+  const el = document.getElementById('stage-'+id);
+  el.className = 'stage ' + state;
+}
+
+function setConnector(id, active) {
+  document.getElementById('conn-'+id).className = 'connector' + (active ? ' active' : '');
+}
+
+function showLoading(bodyId, msg) {
+  document.getElementById(bodyId).innerHTML =
+    '<div class="loading"><div class="spinner"></div><div class="loading-text">'+msg+'</div></div>';
+}
+
+function scoreColor(v) {
+  if (v >= 900) return '';
+  if (v >= 700) return 'warn';
+  return 'danger';
+}
+
+function trustColor(v) {
+  if (v >= 900) return 'high';
+  if (v >= 700) return '';
+  return 'low';
+}
+
+function metricsHTML(m) {
+  if (!m || Object.keys(m).length === 0) return '';
+  const ts = m.trust_score || 0;
+  const scores = [
+    {label:'JAILBREAK', val: m.jailbreak_score},
+    {label:'MOD INPUT', val: m.moderation_input},
+    {label:'MOD OUTPUT', val: m.moderation_output},
+    {label:'BIAS INPUT', val: m.bias_input},
+    {label:'BIAS OUTPUT', val: m.bias_output},
+  ];
+  let gridHTML = scores.map(s => {
+    const pct = Math.round((s.val/1000)*100);
+    const cls = scoreColor(s.val);
+    return '<div class="metric-item"><div class="metric-label">'+s.label+'</div><div class="metric-value">'+Math.round(s.val)+'</div><div class="metric-bar"><div class="metric-fill '+cls+'" style="width:'+pct+'%"></div></div></div>';
+  }).join('');
+  return '<div class="metrics-bar"><div class="metrics-title"><span>TUMERYK GUARD METRICS</span><span class="trust-score '+trustColor(ts)+'">'+ts+'</span></div><div class="metrics-grid">'+gridHTML+'</div></div>';
+}
+
+function parseTickers(text) {
+  return text.split(',').map(t => t.trim().replace(/[^A-Z]/g,'').toUpperCase()).filter(Boolean);
+}
+
+function parseAnalysis(text) {
+  const items = [];
+  const blocks = text.split(/\n\n+/);
+  blocks.forEach(block => {
+    const match = block.match(/\*\*([A-Z]+)[^*]*\*\*/);
+    if (match) {
+      items.push({sym: match[1], text: block.replace(/\*\*/g,'').replace(/^[^\:]+\:/,'').trim()});
+    }
+  });
+  return items.length ? items : [{sym:'', text: text}];
+}
+
+function parseRecs(text) {
+  const items = [];
+  const blocks = text.split(/\n\n+/);
+  blocks.forEach(block => {
+    const symMatch = block.match(/\*\*([A-Z]+)[^*]*\*\*/);
+    const recMatch = block.match(/Recommendation[:\s]+([A-Z]+)/i);
+    const confMatch = block.match(/Confidence[:\s]+(\w+)/i);
+    const reasonMatch = block.match(/Reasoning[:\s]+(.+)/i);
+    if (symMatch && recMatch) {
+      items.push({
+        sym: symMatch[1],
+        rec: recMatch[1].toUpperCase(),
+        conf: confMatch ? confMatch[1] : '',
+        reason: reasonMatch ? reasonMatch[1].trim() : ''
+      });
+    }
+  });
+  return items;
+}
+
+function renderCollector(tickers) {
+  const syms = parseTickers(tickers);
+  let html = '<div class="ticker-list">';
+  syms.forEach(sym => {
+    html += '<div class="ticker-item"><div><div class="ticker-sym">'+sym+'</div><div class="ticker-label">Direct LLM call</div></div><div class="ticker-badge">NO GUARD</div></div>';
+  });
+  html += '</div>';
+  document.getElementById('body-collector').innerHTML = html;
+}
+
+function renderResearch(analysis, metrics) {
+  const items = parseAnalysis(analysis);
+  let html = (metrics && metrics.violation) ? '<div class="violation-banner"><div class="violation-icon">⚠</div><div class="violation-text">BLOCKED BY GUARD<br>Violation detected on input</div></div>' : '';
+  html += '<div class="analysis-list">';
+  items.forEach(item => {
+    html += '<div class="analysis-item"><div class="analysis-sym">'+(item.sym||'')+'</div><div class="analysis-text">'+item.text+'</div></div>';
+  });
+  html += '</div>';
+  html += metricsHTML(metrics);
+  document.getElementById('body-research').innerHTML = html;
+}
+
+function renderDecision(recs, metrics) {
+  const items = parseRecs(recs);
+  let html = (metrics && metrics.violation) ? '<div class="violation-banner"><div class="violation-icon">⚠</div><div class="violation-text">BLOCKED BY GUARD<br>Violation detected on input</div></div>' : '';
+  html += '<div class="rec-list">';
+  items.forEach(item => {
+    const cls = item.rec === 'BUY' ? 'badge-buy' : item.rec === 'SELL' ? 'badge-sell' : 'badge-hold';
+    html += '<div class="rec-item"><div class="rec-sym">'+item.sym+'</div><div class="rec-badge '+cls+'">'+item.rec+'</div><div class="rec-reason">'+item.reason+'</div><div class="rec-conf">'+item.conf+'</div></div>';
+  });
+  html += '</div>';
+  html += metricsHTML(metrics);
+  document.getElementById('body-decision').innerHTML = html;
+}
+
+async function runPipeline() {
+  const topic = document.getElementById('topic-input').value.trim();
+  if (!topic) return;
+
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.textContent = 'RUNNING...';
+
+  ['collector','research','decision'].forEach(id => setStage(id, ''));
+  ['body-collector','body-research','body-decision'].forEach(id => {
+    document.getElementById(id).innerHTML = '<div class="placeholder"><div class="placeholder-icon">◎</div><div class="placeholder-text">AWAITING</div></div>';
+  });
+
+  log('Pipeline started — topic: '+topic);
+
+  setStage('collector', 'active');
+  showLoading('body-collector', 'Collecting tickers...');
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({topic})
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({error:'HTTP '+res.status}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const data = await res.json();
+
+    setStage('collector', 'complete');
+    renderCollector(data.tickers);
+    log('Stock Collector → tickers: '+data.tickers, 'success');
+
+    setStage('research', 'active');
+    showLoading('body-research', 'Guard → Research Analyst...');
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const researchBlocked = data.research_metrics && data.research_metrics.violation;
+    setStage('research', researchBlocked ? 'blocked' : 'complete');
+    renderResearch(data.analysis, data.research_metrics);
+    if (researchBlocked) {
+      log('Research Analyst → BLOCKED by Guard (trust score: '+data.research_metrics.trust_score+')', 'warn');
+    } else {
+      log('Research Analyst → 200 OK (trust score: '+data.research_metrics.trust_score+')', 'success');
+    }
+
+    setStage('decision', 'active');
+    showLoading('body-decision', 'Guard → Decision Maker...');
+
+    await new Promise(r => setTimeout(r, 400));
+
+    const decisionBlocked = data.decision_metrics && data.decision_metrics.violation;
+    setStage('decision', decisionBlocked ? 'blocked' : 'complete');
+    renderDecision(data.recommendations, data.decision_metrics);
+    if (decisionBlocked) {
+      log('Decision Maker → BLOCKED by Guard (trust score: '+data.decision_metrics.trust_score+')', 'warn');
+    } else {
+      log('Decision Maker → 200 OK (trust score: '+data.decision_metrics.trust_score+')', 'success');
+    }
+
+    log('Pipeline complete', 'success');
+
+  } catch(err) {
+    log('Pipeline error: '+err.message, 'error');
+    ['collector','research','decision'].forEach(id => {
+      const stage = document.getElementById('stage-'+id);
+      if (!stage.classList.contains('complete')) setStage(id, 'blocked');
+    });
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'RUN →';
+}
+
+document.getElementById('topic-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runPipeline();
+});
+</script>
+</body>
+</html>"""
