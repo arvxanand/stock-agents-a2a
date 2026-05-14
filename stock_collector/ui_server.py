@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
-import uuid
-from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -17,7 +14,7 @@ from pydantic import BaseModel
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from client import collect_tickers, call_agent, STOCK_COLLECTOR_PROMPT
+from client import collect_tickers, call_agent
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
