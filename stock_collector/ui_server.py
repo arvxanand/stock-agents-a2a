@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from client import collect_tickers, call_agent
+from client import collect_tickers, call_agent, ATTACK_PROMPTS
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -43,6 +43,9 @@ app = FastAPI(lifespan=lifespan)
 
 class RunRequest(BaseModel):
     topic: str
+
+class AttackRequest(BaseModel):
+    attack_name: str
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -79,8 +82,27 @@ async def run_pipeline(body: RunRequest):
         logger.error(f"Pipeline error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
+@app.post("/api/attack")
+async def run_attack(body: AttackRequest):
+    attack_prompt = ATTACK_PROMPTS.get(body.attack_name)
+    if not attack_prompt:
+        return JSONResponse({"error": f"Unknown attack: {body.attack_name}"}, status_code=400)
+    
+    try:
+        analysis, research_metrics = await call_agent(
+            app.state.http_client, GUARD_URL, "ResearchAnalyst", attack_prompt
+        )
 
+        return {
+            "attack_name": body.attack_name,
+            "attack_prompt": attack_prompt,
+            "analysis": analysis,
+            "research_metrics": research_metrics,
+        }
 
+    except Exception as exc:
+        logger.error(f"Attack pipeline error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 if __name__ == "__main__":
     if not TUMERYK_API_KEY:

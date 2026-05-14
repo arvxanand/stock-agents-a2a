@@ -120,6 +120,16 @@ body{display:flex;flex-direction:column;overflow-x:hidden}
 .log-error{color:var(--red)}
 .log-warn{color:var(--amber)}
 .log-msg{color:#718096}
+.redteam-card{background:var(--surface);border:1px solid var(--red-border);border-radius:12px;padding:1.5rem;margin-bottom:1.75rem}
+.redteam-label{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--red);margin-bottom:0.75rem;font-family:'Space Mono',monospace}
+.attack-btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:1rem}
+.attack-btn{background:var(--red-dim);color:var(--red);border:1px solid var(--red-border);border-radius:8px;padding:0.6rem 1rem;font-size:11px;font-weight:700;font-family:'Space Mono',monospace;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s}
+.attack-btn:hover{background:var(--red-border)}
+.attack-btn:disabled{opacity:0.4;cursor:not-allowed}
+.attack-btn.active{background:var(--red-border);border-color:var(--red)}
+.attack-result{display:none;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--border)}
+.attack-prompt-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:1rem}
+.attack-prompt-label{font-size:9px;letter-spacing:1px;color:var(--dim);margin-bottom:6px;text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -145,6 +155,23 @@ body{display:flex;flex-direction:column;overflow-x:hidden}
       <button class="run-btn" id="run-btn" onclick="runPipeline()">RUN →</button>
     </div>
   </div>
+
+  <div class="redteam-card">
+  <div class="redteam-label">⚠ Red Team — Attack Simulator</div>
+  <div class="attack-btns">
+    <button class="attack-btn" onclick="runAttack('Jailbreak')">Jailbreak</button>
+    <button class="attack-btn" onclick="runAttack('Prompt Injection')">Prompt Injection</button>
+    <button class="attack-btn" onclick="runAttack('DAN Roleplay')">DAN Roleplay</button>
+    <button class="attack-btn" onclick="runAttack('PII Extraction')">PII Extraction</button>
+    <button class="attack-btn" onclick="runAttack('Combined Attack')">Combined Attack</button>
+  </div>
+  <div class="attack-result" id="attack-result">
+    <div class="attack-prompt-label">Attack Prompt Sent</div>
+    <div class="attack-prompt-box" id="attack-prompt-box"></div>
+    <div id="attack-metrics"></div>
+  </div>
+</div>
+
 
   <div class="pipeline">
     <div class="stage" id="stage-collector">
@@ -417,9 +444,60 @@ async function runPipeline() {
   btn.textContent = 'RUN →';
 }
 
+async function runAttack(attackName) {
+  const btns = document.querySelectorAll('.attack-btn');
+  btns.forEach(b => { b.disabled = true; b.classList.remove('active'); });
+  const activeBtn = [...btns].find(b => b.textContent === attackName);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  const resultEl = document.getElementById('attack-result');
+  const promptBox = document.getElementById('attack-prompt-box');
+  const metricsEl = document.getElementById('attack-metrics');
+
+  resultEl.style.display = 'none';
+  metricsEl.innerHTML = '<div class="loading"><div class="spinner"></div><div class="loading-text">Sending attack through Guard...</div></div>';
+  resultEl.style.display = 'block';
+
+  log('Red team attack started — type: ' + attackName, 'warn');
+
+  try {
+    const res = await fetch('/api/attack', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({attack_name: attackName})
+    });
+
+    const data = await res.json();
+
+    promptBox.textContent = data.attack_prompt || '';
+
+    const m = data.research_metrics || {};
+    const blocked = m.violation;
+    const ts = m.trust_score || 0;
+
+    if (blocked) {
+      log('Guard BLOCKED attack — trust score: ' + ts, 'error');
+      metricsEl.innerHTML =
+        '<div class="violation-banner"><div class="violation-icon">⚠</div><div class="violation-text">BLOCKED BY GUARD — Trust Score: ' + ts + '<br>Attack type: ' + attackName + '<br>Reason: ' + (m.block_reason || 'Policy violation') + '</div></div>'
+        metricsHTML(m);
+    } else {
+      log('Attack passed Guard — trust score: ' + ts, 'warn');
+      metricsEl.innerHTML =
+        '<div style="color:var(--amber);font-family:Space Mono,monospace;font-size:11px;margin-bottom:8px;">⚠ NOT BLOCKED — trust score: ' + ts + '</div>' +
+        metricsHTML(m);
+    }
+
+  } catch(err) {
+    log('Attack request error: ' + err.message, 'error');
+    metricsEl.innerHTML = '<div style="color:var(--red);font-family:Space Mono,monospace;font-size:11px;">Error: ' + err.message + '</div>';
+  }
+
+  btns.forEach(b => { b.disabled = false; b.classList.remove('active'); });
+}
+
 document.getElementById('topic-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') runPipeline();
 });
 </script>
 </body>
-</html>"""
+</html>
