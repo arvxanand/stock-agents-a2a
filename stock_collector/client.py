@@ -5,6 +5,8 @@ import logging
 import os
 import uuid
 from pathlib import Path
+import base64
+import json
 
 import httpx
 from dotenv import load_dotenv
@@ -17,6 +19,21 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 logger = logging.getLogger("stock_collector")
+
+def decode_trust_credential(token: str) -> dict:
+    """Decode the Tumeryk trust credential — handles both JWT and plain base64 JSON."""
+    try:
+        # Try standard JWT format (header.payload.signature) first
+        parts = token.split(".")
+        segment = parts[1] if len(parts) == 3 else parts[0]
+        padding = 4 - len(segment) % 4
+        if padding != 4:
+            segment += "=" * padding
+        decoded = base64.urlsafe_b64decode(segment)
+        return json.loads(decoded)
+    except Exception as e:
+        logger.debug(f"Trust credential decode failed: {e}")
+        return {}
 
 STOCK_COLLECTOR_PROMPT = """\
 You are a stock market researcher. Given a topic or sector, identify 3 relevant
@@ -39,7 +56,7 @@ async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str) -> str:
     logger.info(f"Collected tickers: {tickers}")
     return tickers.strip()
 
-async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> str:
+async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> tuple[str, dict]:
     resolver = A2ACardResolver(httpx_client=http_client, base_url=guard_base_url)
 
     try:
@@ -48,7 +65,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
         )
     except Exception as exc:
         logger.error(f"Failed to discover agent role={role}: {exc}")
-        return f"Error discovering agent: {exc}"
+        return f"Error discovering agent: {exc}", {}
 
     a2a_client = ClientFactory(
         ClientConfig(httpx_client=http_client, streaming=False)
@@ -67,19 +84,39 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             break
     except Exception as exc:
         logger.error(f"Failed to call agent: {exc}")
-        return f"Error calling agent: {exc}"
+        return f"Error calling agent: {exc}", {}
 
     if isinstance(result, Task):
         texts = []
+        metrics = {}
+
+        if result.metadata:
+            raw_metrics = result.metadata.get("metrics", {})
+            trust_cred_token = result.metadata.get("trust_credential", "")
+            if trust_cred_token:
+                payload = decode_trust_credential(trust_cred_token)
+                subject = payload.get("credentialSubject", {})
+                metrics = {
+                    "trust_score": subject.get("trust_score"),
+                    "policy_id": subject.get("policy_id"),
+                    "violation": raw_metrics.get("input", {}).get("violation", False),
+                    "jailbreak_score": raw_metrics.get("input", {}).get("jailbreak_score"),
+                    "moderation_input": raw_metrics.get("input", {}).get("moderation_scores", {}).get("input"),
+                    "moderation_output": raw_metrics.get("output", {}).get("moderation_scores", {}).get("output"),
+                    "bias_input": raw_metrics.get("input", {}).get("bias_score"),
+                    "bias_output": raw_metrics.get("output", {}).get("bias_score"),
+                }
+
         if result.artifacts:
             for artifact in result.artifacts:
                 for part in artifact.parts:
                     root = getattr(part, "root", part)
                     if hasattr(root, "text"):
                         texts.append(root.text)
-        return "\n".join(texts) if texts else "No response received"
 
-    return str(result)
+        return "\n".join(texts) if texts else "No response received", metrics
+
+    return str(result), {}
 
 async def main():
     openai_key = os.getenv("OPENAI_API_KEY", "")
@@ -113,11 +150,11 @@ async def main():
 
     async with httpx.AsyncClient(timeout=120.0, headers=auth_headers) as http_client:
         print("\n--- Step 2: Research Analyst ---")
-        analysis = await call_agent(http_client, "https://chat-azdev.tmryk.com", "ResearchAnalyst", tickers)
+        analysis, research_metrics = await call_agent(http_client, "https://chat-azdev.tmryk.com", "ResearchAnalyst", tickers)
         print(f"Analysis:\n{analysis}")
 
         print("\n--- Step 3: Decision Maker ---")
-        recommendations = await call_agent(http_client, "https://chat-azdev.tmryk.com", "DecisionMaker", analysis)
+        recommendations, decision_metrics = await call_agent(http_client, "https://chat-azdev.tmryk.com", "DecisionMaker", analysis)
         print(f"Recommendations:\n{recommendations}")
 
 
