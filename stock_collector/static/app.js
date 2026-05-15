@@ -149,6 +149,39 @@ function parseRecs(text) {
   return items;
 }
 
+const agentCards = {};
+
+function showAgentCard(role) {
+  const card = agentCards[role];
+  if (!card) return;
+
+  document.getElementById('modal-agent-name').textContent = card.name || role;
+
+  const fields = [
+    {label: 'Description', value: card.description || '—'},
+    {label: 'Version', value: card.version || '—'},
+    {label: 'Protocol', value: card.protocolVersion || '—'},
+    {label: 'Provider', value: card.provider || '—'},
+    {label: 'URL', value: card.url || '—', mono: true},
+    {label: 'Docs', value: card.documentationUrl || '—', mono: true},
+    {label: 'Skills', value: card.skills && card.skills.length ? card.skills.join(', ') : '—'},
+];
+
+  document.getElementById('modal-fields').innerHTML = fields.map(f => `
+    <div style="display:flex; align-items:flex-start; gap:12px; padding:10px 0; border-bottom:1px solid var(--border);">
+      <span style="font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); width:100px; flex-shrink:0; padding-top:2px;">${f.label}</span>
+      <span style="font-size:13px; color:var(--text); flex:1; line-height:1.5; ${f.mono ? "font-family:'Space Mono',monospace; font-size:11px; color:var(--muted); word-break:break-all;" : ''}">${f.value}</span>
+    </div>
+  `).join('');
+
+  const modal = document.getElementById('agent-card-modal');
+  modal.style.display = 'flex';
+}
+
+function closeAgentCard() {
+  document.getElementById('agent-card-modal').style.display = 'none';
+}
+
 function renderCollector(tickers, parsedTickers) {
   console.log("DEBUG parsedTickers:", JSON.stringify(parsedTickers));
   let html = '<div class="ticker-list">';
@@ -324,6 +357,10 @@ async function runPipeline() {
 
     const data = await res.json();
     console.log('recommendations:', data.recommendations);
+    if (data.research_card) {
+        agentCards['research'] = data.research_card;
+        document.getElementById('btn-card-research').style.display = 'inline-block';
+    }
 
     setStage('collector', 'complete');
     renderCollector(data.tickers, data.parsed_tickers);
@@ -401,6 +438,10 @@ async function continuePipeline() {
     }
 
     const data = await res.json();
+    if (data.decision_card) {
+        agentCards['decision'] = data.decision_card;
+        document.getElementById('btn-card-decision').style.display = 'inline-block';
+    }
     const decisionBlocked = data.decision_metrics && data.decision_metrics.violation;
     setStage('decision', decisionBlocked ? 'blocked' : 'complete');
     renderDecision(data.recommendations, data.decision_metrics);

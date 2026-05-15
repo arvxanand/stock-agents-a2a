@@ -10,6 +10,7 @@ import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import sys
@@ -17,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from client import collect_tickers, call_agent, ATTACK_PROMPTS, score_prompt, parse_tickers
 
 load_dotenv(Path(__file__).parent.parent / ".env")
+
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 logger = logging.getLogger("ui_server")
@@ -39,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
 class RunRequest(BaseModel):
@@ -66,7 +69,7 @@ async def run_research(body: RunRequest):
     try:
         tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
 
-        analysis, research_metrics = await call_agent(
+        analysis, research_metrics, research_card = await call_agent(
             app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers
         )
 
@@ -75,6 +78,7 @@ async def run_research(body: RunRequest):
             "parsed_tickers": parse_tickers(tickers),
             "analysis": analysis,
             "research_metrics": research_metrics,
+            "research_card": research_card,
         }
 
     except Exception as exc:
@@ -85,27 +89,29 @@ async def run_research(body: RunRequest):
 @app.post("/api/run-decision")
 async def run_decision(body: RunDecisionRequest):
     try:
-        recommendations, decision_metrics = await call_agent(
+        recommendations, decision_metrics, decision_card = await call_agent(
             app.state.http_client, GUARD_URL, "DecisionMaker", body.analysis
         )
 
         return {
             "recommendations": recommendations,
             "decision_metrics": decision_metrics,
+            "decision_card": decision_card,
         }
 
     except Exception as exc:
         logger.error(f"Pipeline error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
+
 @app.post("/api/attack")
 async def run_attack(body: AttackRequest):
     attack_prompt = ATTACK_PROMPTS.get(body.attack_name)
     if not attack_prompt:
         return JSONResponse({"error": f"Unknown attack: {body.attack_name}"}, status_code=400)
-    
+
     try:
-        analysis, research_metrics = await call_agent(
+        analysis, research_metrics, _ = await call_agent(
             app.state.http_client, GUARD_URL, "ResearchAnalyst", attack_prompt
         )
 

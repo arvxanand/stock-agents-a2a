@@ -5,12 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Stock Agents — A2A Pipeline</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-
 <link rel="stylesheet" href="/static/style.css">
-
 </head>
 <body>
 <div class="toast" id="toast"></div>
+<div id="agent-card-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; width:100%; max-width:520px; overflow:hidden; margin:1rem;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border);">
+      <div>
+        <div style="font-family:'Space Mono',monospace; font-size:10px; color:var(--muted); letter-spacing:1px; text-transform:uppercase; margin-bottom:3px;">A2A Agent Card</div>
+        <div id="modal-agent-name" style="font-size:15px; font-weight:500; color:var(--text);"></div>
+      </div>
+      <button onclick="closeAgentCard()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">✕</button>
+    </div>
+    <div style="padding:16px 20px;">
+      <div id="modal-verified" style="display:flex; align-items:center; gap:8px; background:var(--green-dim); border:1px solid var(--green-border); border-radius:8px; padding:10px 14px; margin-bottom:14px;">
+        <span style="color:var(--green); font-size:16px;">✓</span>
+        <div>
+          <div style="font-family:'Space Mono',monospace; font-size:11px; color:var(--green); font-weight:700;">Cryptographically verified</div>
+          <div style="font-family:'Space Mono',monospace; font-size:10px; color:var(--green); opacity:0.8;">Agent identity confirmed via public key signature</div>
+        </div>
+      </div>
+      <div id="modal-fields"></div>
+    </div>
+  </div>
+</div>
 <div class="header">
   <div class="logo">
     <div class="logo-mark">SA</div>
@@ -47,21 +66,20 @@
   </div>
 
   <div class="redteam-card">
-  <div class="redteam-label">⚠ Red Team — Attack Simulator</div>
-  <div class="attack-btns">
-    <button class="attack-btn" onclick="runAttack('Jailbreak')">Jailbreak</button>
-    <button class="attack-btn" onclick="runAttack('Prompt Injection')">Prompt Injection</button>
-    <button class="attack-btn" onclick="runAttack('DAN Roleplay')">DAN Roleplay</button>
-    <button class="attack-btn" onclick="runAttack('PII Extraction')">PII Extraction</button>
-    <button class="attack-btn" onclick="runAttack('Combined Attack')">Combined Attack</button>
+    <div class="redteam-label">⚠ Red Team — Attack Simulator</div>
+    <div class="attack-btns">
+      <button class="attack-btn" onclick="runAttack('Jailbreak')">Jailbreak</button>
+      <button class="attack-btn" onclick="runAttack('Prompt Injection')">Prompt Injection</button>
+      <button class="attack-btn" onclick="runAttack('DAN Roleplay')">DAN Roleplay</button>
+      <button class="attack-btn" onclick="runAttack('PII Extraction')">PII Extraction</button>
+      <button class="attack-btn" onclick="runAttack('Combined Attack')">Combined Attack</button>
+    </div>
+    <div class="attack-result" id="attack-result">
+      <div class="attack-prompt-label">Attack Prompt Sent</div>
+      <div class="attack-prompt-box" id="attack-prompt-box"></div>
+      <div id="attack-metrics"></div>
+    </div>
   </div>
-  <div class="attack-result" id="attack-result">
-    <div class="attack-prompt-label">Attack Prompt Sent</div>
-    <div class="attack-prompt-box" id="attack-prompt-box"></div>
-    <div id="attack-metrics"></div>
-  </div>
-</div>
-
 
   <div class="pipeline">
     <div class="stage" id="stage-collector">
@@ -86,7 +104,10 @@
           <div class="stage-tag guarded">STAGE 02 · GUARDED</div>
           <div class="stage-name">Research Analyst</div>
         </div>
-        <div class="stage-dot"></div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="card-btn" id="btn-card-research" onclick="showAgentCard('research')" style="display:none">VIEW AGENT CARD</button>
+          <div class="stage-dot"></div>
+        </div>
       </div>
       <div class="stage-body" id="body-research">
         <div class="placeholder">
@@ -102,7 +123,10 @@
           <div class="stage-tag guarded">STAGE 03 · GUARDED</div>
           <div class="stage-name">Decision Maker</div>
         </div>
-        <div class="stage-dot"></div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="card-btn" id="btn-card-decision" onclick="showAgentCard('decision')" style="display:none">VIEW AGENT CARD</button>
+          <div class="stage-dot"></div>
+        </div>
       </div>
       <div class="stage-body" id="body-decision">
         <div class="placeholder">
@@ -124,6 +148,5 @@
 </div>
 
 <script src="/static/app.js"></script>
-
 </body>
 </html>

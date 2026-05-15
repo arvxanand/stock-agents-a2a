@@ -116,10 +116,10 @@ def parse_tickers(raw: str) -> list[dict]:
 
 async def score_prompt(http_client: httpx.AsyncClient, guard_base_url: str, prompt_text: str) -> dict:
     """Send a prompt to Guard and return the trust metrics without running the full pipeline."""
-    _, metrics = await call_agent(http_client, guard_base_url, "ResearchAnalyst", prompt_text)
+    _ , metrics, _ = await call_agent(http_client, guard_base_url, "ResearchAnalyst", prompt_text)
     return metrics
 
-async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> tuple[str, dict]:
+async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> tuple[str, dict, dict]:
     resolver = A2ACardResolver(httpx_client=http_client, base_url=guard_base_url)
 
     try:
@@ -128,7 +128,19 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
         )
     except Exception as exc:
         logger.error(f"Failed to discover agent role={role}: {exc}")
-        return f"Error discovering agent: {exc}", {}
+        return f"Error discovering agent: {exc}", {}, {}
+
+    card_data = {
+        "name": getattr(card, "name", ""),
+        "description": getattr(card, "description", ""),
+        "version": getattr(card, "version", ""),
+        "url": str(getattr(card, "url", "")),
+        "skills": [s.get("name", "") if isinstance(s, dict) else getattr(s, "name", str(s)) for s in (card.model_dump().get("skills") or [])],
+        "provider": (card.model_dump().get("provider") or {}).get("organization", ""),
+        "protocolVersion": card.model_dump().get("protocolVersion", ""),
+        "documentationUrl": card.model_dump().get("documentationUrl", ""),
+        "publicKey": None,
+    }
 
     a2a_client = ClientFactory(
         ClientConfig(httpx_client=http_client, streaming=False)
@@ -147,7 +159,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             break
     except Exception as exc:
         logger.error(f"Failed to call agent: {exc}")
-        return f"Error calling agent: {exc}", {}
+        return f"Error calling agent: {exc}", {}, {}
 
     if isinstance(result, Task):
         texts = []
@@ -191,9 +203,9 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
                     if hasattr(root, "text"):
                         texts.append(root.text)
 
-        return "\n".join(texts) if texts else "No response received", metrics
+        return "\n".join(texts) if texts else "No response received", metrics, card_data
 
-    return str(result), {}
+    return str(result), {}, card_data
 
 async def main():
     openai_key = os.getenv("OPENAI_API_KEY", "")
@@ -227,11 +239,11 @@ async def main():
 
     async with httpx.AsyncClient(timeout=120.0, headers=auth_headers) as http_client:
         print("\n--- Step 2: Research Analyst ---")
-        analysis, research_metrics = await call_agent(http_client, "https://chat-azdev.tmryk.com", "ResearchAnalyst", tickers)
+        analysis, research_metrics, card_data = await call_agent(http_client, "https://chat-azdev.tmryk.com", "ResearchAnalyst", tickers)
         print(f"Analysis:\n{analysis}")
 
         print("\n--- Step 3: Decision Maker ---")
-        recommendations, decision_metrics = await call_agent(http_client, "https://chat-azdev.tmryk.com", "DecisionMaker", analysis)
+        recommendations, decision_metrics, _ = await call_agent(http_client, "https://chat-azdev.tmryk.com", "DecisionMaker", analysis)
         print(f"Recommendations:\n{recommendations}")
 
 
