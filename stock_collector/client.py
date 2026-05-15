@@ -138,7 +138,6 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
         "skills": [s.get("name", "") if isinstance(s, dict) else getattr(s, "name", str(s)) for s in (card.model_dump().get("skills") or [])],
         "provider": (card.model_dump().get("provider") or {}).get("organization", ""),
         "protocolVersion": card.model_dump().get("protocolVersion", ""),
-        "documentationUrl": card.model_dump().get("documentationUrl", ""),
         "publicKey": None,
     }
 
