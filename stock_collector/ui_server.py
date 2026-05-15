@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from client import collect_tickers, call_agent, ATTACK_PROMPTS
+from client import collect_tickers, call_agent, ATTACK_PROMPTS, score_prompt, parse_tickers
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -43,6 +43,7 @@ app = FastAPI(lifespan=lifespan)
 
 class RunRequest(BaseModel):
     topic: str
+    custom_prompt: str | None = None
 
 class AttackRequest(BaseModel):
     attack_name: str
@@ -60,7 +61,7 @@ async def run_pipeline(body: RunRequest):
         return JSONResponse({"error": "No topic provided"}, status_code=400)
 
     try:
-        tickers = await collect_tickers(app.state.llm, app.state.model, body.topic)
+        tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
 
         analysis, research_metrics = await call_agent(
             app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers
@@ -72,6 +73,7 @@ async def run_pipeline(body: RunRequest):
 
         return {
             "tickers": tickers,
+            "parsed_tickers": parse_tickers(tickers),
             "analysis": analysis,
             "research_metrics": research_metrics,
             "recommendations": recommendations,
@@ -102,6 +104,25 @@ async def run_attack(body: AttackRequest):
 
     except Exception as exc:
         logger.error(f"Attack pipeline error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+@app.post("/api/score-prompt")
+async def score_prompt_endpoint(body: RunRequest):
+    if not body.custom_prompt or not body.custom_prompt.strip():
+        return JSONResponse({"error": "No prompt provided"}, status_code=400)
+
+    try:
+        metrics = await score_prompt(
+            app.state.http_client, GUARD_URL, body.custom_prompt
+        )
+        return {
+            "metrics": metrics,
+            "blocked": metrics.get("violation", False),
+            "trust_score": metrics.get("trust_score", 0),
+        }
+
+    except Exception as exc:
+        logger.error(f"Score prompt error: {exc}")
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 if __name__ == "__main__":

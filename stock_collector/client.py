@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 import base64
 import json
+import re
 
 import httpx
 from dotenv import load_dotenv
@@ -50,12 +51,17 @@ ATTACK_PROMPTS = {
 }
 
 
-async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str) -> str:
+async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str, prompt=None) -> str:
     """Ask the LLM to identify relevant tickers for a given topic."""
+    if prompt:
+        system_prompt ="\n\nLimit to no more than 4 stocks." + prompt
+    else:
+        system_prompt = STOCK_COLLECTOR_PROMPT
+
     response = await llm.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": STOCK_COLLECTOR_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": topic},
         ],
         temperature=0.3,
@@ -63,6 +69,55 @@ async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str) -> str:
     tickers = response.choices[0].message.content or ""
     logger.info(f"Collected tickers: {tickers}")
     return tickers.strip()
+
+def parse_tickers(raw: str) -> list[dict]:
+    print("DEBUG parse_tickers input:", repr(raw))
+    results = []
+    seen = set()
+
+    lines = [l.strip() for l in raw.split('\n') if l.strip()]
+
+    for line in lines:
+        line = re.sub(r'^\d+[\.\)]\s*', '', line)
+
+        # NEW — handles "Apple Inc. (AAPL)" format
+        paren_match = re.search(r'([A-Za-z][A-Za-z\s&.,]+?)\s*\(([A-Z]{1,5})\)', line)
+        if paren_match:
+            name = paren_match.group(1).strip()
+            sym = paren_match.group(2).strip()
+            if sym not in seen:
+                seen.add(sym)
+                results.append({"sym": sym, "name": name, "sector": ""})
+            continue
+
+        # existing — handles "AAPL - Apple Inc. - Technology" format
+        match = re.search(
+            r'\b([A-Z]{1,5})\b\s*[,\-–]\s*([A-Za-z][A-Za-z\s&.]+?)\s*[,\-–]\s*([A-Za-z][A-Za-z\s&]+)',
+            line
+        )
+        if match:
+            sym = match.group(1).strip()
+            name = match.group(2).strip()
+            sector = match.group(3).strip()
+            if sym not in seen and len(sym) >= 2 and not name.isupper():
+                seen.add(sym)
+                results.append({"sym": sym, "name": name, "sector": sector})
+            continue
+
+        # fallback — simple ticker extraction
+        SKIP = {'AI', 'PE', 'CEO', 'CFO', 'ETF', 'IPO', 'GDP', 'USA', 'USD', 'THE', 'AND', 'FOR'}
+        for sym in re.findall(r'\b[A-Z]{2,5}\b', line):
+            if sym not in SKIP and sym not in seen:
+                seen.add(sym)
+                results.append({"sym": sym, "name": "", "sector": ""})
+
+    print("DEBUG parse_tickers output:", results)
+    return results
+
+async def score_prompt(http_client: httpx.AsyncClient, guard_base_url: str, prompt_text: str) -> dict:
+    """Send a prompt to Guard and return the trust metrics without running the full pipeline."""
+    _, metrics = await call_agent(http_client, guard_base_url, "ResearchAnalyst", prompt_text)
+    return metrics
 
 async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> tuple[str, dict]:
     resolver = A2ACardResolver(httpx_client=http_client, base_url=guard_base_url)
