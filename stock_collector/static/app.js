@@ -356,7 +356,7 @@ async function runPipeline() {
     }
 
     const data = await res.json();
-    console.log('recommendations:', data.recommendations);
+
     if (data.research_card) {
         agentCards['research'] = data.research_card;
         document.getElementById('btn-card-research').style.display = 'inline-block';
@@ -387,7 +387,7 @@ async function runPipeline() {
     topicInput.disabled = false;
     if (promptArea) promptArea.disabled = false;
     return;
-    
+
   } catch(err) {
     log('Pipeline error: '+err.message, 'error');
     ['collector','research','decision'].forEach(id => {
