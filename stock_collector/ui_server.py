@@ -45,6 +45,9 @@ class RunRequest(BaseModel):
     topic: str
     custom_prompt: str | None = None
 
+class RunDecisionRequest(BaseModel):
+    analysis: str
+
 class AttackRequest(BaseModel):
     attack_name: str
 
@@ -55,8 +58,8 @@ async def root():
     return HTMLResponse(html)
 
 
-@app.post("/api/run")
-async def run_pipeline(body: RunRequest):
+@app.post("/api/run-research")
+async def run_research(body: RunRequest):
     if not body.topic.strip():
         return JSONResponse({"error": "No topic provided"}, status_code=400)
 
@@ -67,15 +70,26 @@ async def run_pipeline(body: RunRequest):
             app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers
         )
 
-        recommendations, decision_metrics = await call_agent(
-            app.state.http_client, GUARD_URL, "DecisionMaker", analysis
-        )
-
         return {
             "tickers": tickers,
             "parsed_tickers": parse_tickers(tickers),
             "analysis": analysis,
             "research_metrics": research_metrics,
+        }
+
+    except Exception as exc:
+        logger.error(f"Pipeline error: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/api/run-decision")
+async def run_decision(body: RunDecisionRequest):
+    try:
+        recommendations, decision_metrics = await call_agent(
+            app.state.http_client, GUARD_URL, "DecisionMaker", body.analysis
+        )
+
+        return {
             "recommendations": recommendations,
             "decision_metrics": decision_metrics,
         }

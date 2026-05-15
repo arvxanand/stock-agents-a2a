@@ -456,6 +456,7 @@ function renderDecision(recs, metrics) {
 }
 
 const DEFAULT_PROMPT = `You are a stock market researcher. Given a topic or sector, identify 3 relevant stock tickers to analyze. Return ONLY a comma separated list of tickers.\nExample: AAPL, TSLA, NVDA`;
+let pendingAnalysis = null;
 
 function togglePrompt() {
   const body = document.getElementById('customize-body');
@@ -489,6 +490,17 @@ function showToast(msg) {
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
 }
+
+function showContinueButton() {
+  const body = document.getElementById('body-decision');
+  body.innerHTML = `
+    <div style="display:flex; justify-content:center; align-items:center; padding: 40px;">
+      <button class="run-btn" onclick="continuePipeline()">CONTINUE →</button>
+    </div>
+  `;
+}
+
+
 
 async function runPipeline() {
   const promptArea = document.getElementById('custom-prompt');
@@ -559,7 +571,7 @@ async function runPipeline() {
   showLoading('body-collector', 'Collecting tickers...');
 
   try {
-    const res = await fetch('/api/run', {
+    const res = await fetch('/api/run-research', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({topic, custom_prompt: customPrompt})
@@ -591,10 +603,13 @@ async function runPipeline() {
       log('Research Analyst → 200 OK (trust score: '+data.research_metrics.trust_score+')', 'success');
     }
 
-    setStage('decision', 'active');
-    showLoading('body-decision', 'Guard → Decision Maker...');
-
-    await new Promise(r => setTimeout(r, 400));
+    pendingAnalysis = data.analysis;
+    showContinueButton();
+    btn.disabled = false;
+    btn.textContent = 'RUN →';
+    topicInput.disabled = false;
+    if (promptArea) promptArea.disabled = false;
+    return;
 
     const decisionBlocked = data.decision_metrics && data.decision_metrics.violation;
     setStage('decision', decisionBlocked ? 'blocked' : 'complete');
@@ -613,6 +628,54 @@ async function runPipeline() {
       const stage = document.getElementById('stage-'+id);
       if (!stage.classList.contains('complete')) setStage(id, 'blocked');
     });
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'RUN →';
+  topicInput.disabled = false;
+  if (promptArea) promptArea.disabled = false;
+}
+
+async function continuePipeline() {
+  const btn = document.getElementById('run-btn');
+  const promptArea = document.getElementById('custom-prompt');
+  const topicInput = document.getElementById('topic-input');
+
+  btn.disabled = true;
+  topicInput.disabled = true;
+  if (promptArea) promptArea.disabled = true;
+
+  setStage('decision', 'active');
+  showLoading('body-decision', 'Guard → Decision Maker...');
+
+  try {
+    const res = await fetch('/api/run-decision', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({analysis: pendingAnalysis})
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({error: 'HTTP ' + res.status}));
+      throw new Error(err.error || 'Server error');
+    }
+
+    const data = await res.json();
+    const decisionBlocked = data.decision_metrics && data.decision_metrics.violation;
+    setStage('decision', decisionBlocked ? 'blocked' : 'complete');
+    renderDecision(data.recommendations, data.decision_metrics);
+    if (decisionBlocked) {
+      log('Decision Maker → BLOCKED by Guard (trust score: ' + data.decision_metrics.trust_score + ')', 'warn');
+    } else {
+      log('Decision Maker → 200 OK (trust score: ' + data.decision_metrics.trust_score + ')', 'success');
+    }
+
+    log('Pipeline complete', 'success');
+    pendingAnalysis = null;
+
+  } catch(err) {
+    log('Pipeline error: ' + err.message, 'error');
+    setStage('decision', 'blocked');
   }
 
   btn.disabled = false;
