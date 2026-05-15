@@ -387,18 +387,7 @@ async function runPipeline() {
     topicInput.disabled = false;
     if (promptArea) promptArea.disabled = false;
     return;
-
-    const decisionBlocked = data.decision_metrics && data.decision_metrics.violation;
-    setStage('decision', decisionBlocked ? 'blocked' : 'complete');
-    renderDecision(data.recommendations, data.decision_metrics);
-    if (decisionBlocked) {
-      log('Decision Maker → BLOCKED by Guard (trust score: '+data.decision_metrics.trust_score+')', 'warn');
-    } else {
-      log('Decision Maker → 200 OK (trust score: '+data.decision_metrics.trust_score+')', 'success');
-    }
-
-    log('Pipeline complete', 'success');
-
+    
   } catch(err) {
     log('Pipeline error: '+err.message, 'error');
     ['collector','research','decision'].forEach(id => {
