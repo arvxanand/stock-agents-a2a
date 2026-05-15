@@ -172,7 +172,7 @@ body{display:flex;flex-direction:column;overflow-x:hidden}
       <span class="toggle-hint" id="toggle-hint">click to expand</span>
     </div>
     <div id="customize-body" style="display:none">
-      <textarea class="prompt-textarea" id="custom-prompt" placeholder="Customize how the Stock Collector AI behaves. Tell it what format to return, what data to focus on, or how detailed to be. Keep it finance related or Guard will block it."></textarea>
+      <textarea class="prompt-textarea" id="custom-prompt" oninput="savePrompt()" placeholder="Customize how the Stock Collector AI behaves. Tell it what format to return, what data to focus on, or how detailed to be. Keep it finance related or Guard will block it."></textarea>
       <div class="prompt-footer">
         <button class="reset-btn" onclick="resetPrompt()">Reset to default</button>
         <div id="prompt-score-pill" class="prompt-score-pill" style="display:none"></div>
@@ -294,6 +294,25 @@ function scoreColor(v) {
   if (v >= 700) return 'warn';
   return 'danger';
 }
+
+function savePrompt() {
+  const textarea = document.getElementById('custom-prompt');
+  localStorage.setItem('customPrompt', textarea.value);
+}
+
+window.onload = function() {
+  const saved = localStorage.getItem('customPrompt');
+  const wasOpen = localStorage.getItem('promptOpen') === 'true';
+  if (saved) {
+    const textarea = document.getElementById('custom-prompt');
+    textarea.value = saved;
+    if (wasOpen) {
+      document.getElementById('customize-body').style.display = 'block';
+      document.getElementById('toggle-arrow').textContent = '▾';
+      document.getElementById('toggle-hint').textContent = 'click to collapse';
+    }
+  }
+};
 
 function trustColor(v) {
   if (v >= 900) return 'high';
@@ -447,9 +466,8 @@ function togglePrompt() {
   body.style.display = isOpen ? 'none' : 'block';
   arrow.textContent = isOpen ? '▸' : '▾';
   hint.textContent = isOpen ? 'click to expand' : 'click to collapse';
-  if (!isOpen) {
-    textarea.focus();
-  }
+  localStorage.setItem('promptOpen', isOpen ? 'false' : 'true');  // add this line
+  if (!isOpen) textarea.focus();
 }
 
 function resetPrompt() {

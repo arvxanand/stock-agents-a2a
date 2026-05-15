@@ -75,7 +75,7 @@ def parse_tickers(raw: str) -> list[dict]:
     results = []
     seen = set()
 
-    lines = [l.strip() for l in raw.split('\n') if l.strip()]
+    lines = [line.strip() for line in raw.split('\n') if line.strip()]
 
     for line in lines:
         line = re.sub(r'^\d+[\.\)]\s*', '', line)
