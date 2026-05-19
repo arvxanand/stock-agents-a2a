@@ -60,6 +60,9 @@ async def root():
     html = (Path(__file__).parent / "index.html").read_text()
     return HTMLResponse(html)
 
+@app.get("/history")
+async def history_page():
+    html = (Path(__file__).parent / "history.html")
 
 @app.post("/api/run-research")
 async def run_research(body: RunRequest):

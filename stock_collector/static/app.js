@@ -35,12 +35,37 @@ function scoreColor(v) {
   return 'danger';
 }
 
+function saveRun(recommendations, decisionMetrics, decisionCard) {
+  const run = {
+    topic: pendingTopic,
+    timestamp: new Date().toISOString(),
+    tickers: pendingTickers,
+    parsed_tickers: pendingParsedTickers,
+    analysis: pendingAnalysis,
+    research_metrics: pendingResearchMetrics,
+    research_card: agentCards['research'],
+    recommendations: recommendations,
+    decision_metrics: decisionMetrics,
+    decision_card: decisionCard,
+    prompt_score: pendingPromptScore,
+    custom_prompt: pendingCustomPrompt
+  };
+
+  const existing = JSON.parse(localStorage.getItem('pipelineHistory') || '[]');
+  existing.unshift(run);
+  localStorage.setItem('pipelineHistory', JSON.stringify(existing));
+}
+
 function savePrompt() {
   const textarea = document.getElementById('custom-prompt');
   localStorage.setItem('customPrompt', textarea.value);
 }
 
 window.onload = function() {
+  if (localStorage.getItem('theme') === 'light') {
+  document.body.classList.add('light');
+  document.getElementById('theme-toggle').textContent = '☾ DARK MODE';
+}
   const saved = localStorage.getItem('customPrompt');
   const wasOpen = localStorage.getItem('promptOpen') === 'true';
   if (saved) {
@@ -230,6 +255,12 @@ function renderDecision(recs, metrics) {
 
 const DEFAULT_PROMPT = `You are a stock market researcher. Given a topic or sector, identify 3 relevant stock tickers to analyze. Return ONLY a comma separated list of tickers.\nExample: AAPL, TSLA, NVDA`;
 let pendingAnalysis = null;
+let pendingTopic = null;
+let pendingTickers = null;
+let pendingParsedTickers = null;
+let pendingResearchMetrics = null;
+let pendingPromptScore = null;
+let pendingCustomPrompt = null;
 
 function togglePrompt() {
   const body = document.getElementById('customize-body');
@@ -262,6 +293,13 @@ function showToast(msg) {
   toast.textContent = msg;
   toast.classList.add('show');
   setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  const btn = document.getElementById('theme-toggle');
+  btn.textContent = isLight ? '☾ DARK MODE' : '☀ LIGHT MODE';
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
 }
 
 function showContinueButton() {
@@ -331,6 +369,7 @@ async function runPipeline() {
         pill.style.color = 'var(--green)';
         pill.style.borderColor = 'var(--green-border)';
         pill.textContent = 'SCORED · ' + ts;
+        pendingPromptScore = ts;
         log('Custom prompt scored — trust score: ' + ts, 'success');
       }
     } catch(err) {
@@ -380,6 +419,11 @@ async function runPipeline() {
       log('Research Analyst → 200 OK (trust score: '+data.research_metrics.trust_score+')', 'success');
     }
 
+    pendingTopic = topic;
+    pendingTickers = data.tickers;
+    pendingParsedTickers = data.parsed_tickers;
+    pendingResearchMetrics = data.research_metrics;
+    pendingCustomPrompt = customPrompt;
     pendingAnalysis = data.analysis;
     showContinueButton();
     btn.disabled = false;
@@ -441,6 +485,7 @@ async function continuePipeline() {
     }
 
     log('Pipeline complete', 'success');
+    saveRun(data.recommendations, data.decision_metrics, data.decision_card);
     pendingAnalysis = null;
 
   } catch(err) {
