@@ -150,6 +150,7 @@ activemq-data/
 # Environments
 .env
 .envrc
+guard_response_examples/
 .venv
 env/
 venv/
