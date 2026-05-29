@@ -63,10 +63,6 @@ async def root():
     html = (Path(__file__).parent / "index.html").read_text()
     return HTMLResponse(html)
 
-@app.get("/history")
-async def history_page():
-    html = (Path(__file__).parent / "history.html")
-
 @app.post("/api/run-research")
 async def run_research(body: RunRequest):
     if not body.topic.strip():
@@ -81,6 +77,9 @@ async def run_research(body: RunRequest):
         analysis, research_metrics, research_card = await call_agent(
             app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers
         )
+
+        if not analysis or not analysis.strip():
+            analysis = "No analysis returned."
 
         return {
             "tickers": tickers,

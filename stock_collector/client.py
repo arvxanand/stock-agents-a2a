@@ -204,7 +204,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             for artifact in result.artifacts:
                 for part in artifact.parts:
                     root = getattr(part, "root", part)
-                    if hasattr(root, "text"):
+                    if hasattr(root, "text") and root.text and root.text.strip():
                         texts.append(root.text)
         log_event("guard_decision", {
             "stage": role,
