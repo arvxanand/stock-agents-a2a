@@ -9,9 +9,13 @@ import base64
 import json
 import re
 
+import time
+
 import httpx
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+
+from splunk_logger import log_event
 
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.types import Message, Part, Role, Task, TextPart
@@ -152,6 +156,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
         context_id=uuid.uuid4().hex,
     )
 
+    _start = time.time()
     try:
         async for event in a2a_client.send_message(message):
             result = event[0] if isinstance(event, tuple) else event
@@ -201,6 +206,20 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
                     root = getattr(part, "root", part)
                     if hasattr(root, "text"):
                         texts.append(root.text)
+        log_event("guard_decision", {
+            "stage": role,
+            "blocked": metrics.get("violation", False),
+            "block_reason": metrics.get("block_reason"),
+            "jailbreak_score": metrics.get("jailbreak_score"),
+            "bias_score": metrics.get("bias_input"),
+            "trust_score": metrics.get("trust_score"),
+            "latency_ms": round((time.time() - _start) * 1000),
+        })
+
+        print("\n--- FULL METADATA ---")
+        import json
+        print(json.dumps((result.metadata), indent=2))
+        print("--- END METADATA ---\n")
 
         return "\n".join(texts) if texts else "No response received", metrics, card_data
 

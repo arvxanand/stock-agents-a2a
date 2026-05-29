@@ -13,9 +13,12 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import uuid
+
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 from client import collect_tickers, call_agent, ATTACK_PROMPTS, score_prompt, parse_tickers
+from splunk_logger import log_event
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -70,6 +73,9 @@ async def run_research(body: RunRequest):
         return JSONResponse({"error": "No topic provided"}, status_code=400)
 
     try:
+        run_id = uuid.uuid4().hex[:8]
+        log_event("pipeline_run", {"topic": body.topic, "run_id": run_id})
+
         tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
 
         analysis, research_metrics, research_card = await call_agent(
@@ -118,6 +124,13 @@ async def run_attack(body: AttackRequest):
             app.state.http_client, GUARD_URL, "ResearchAnalyst", attack_prompt
         )
 
+        log_event("attack_attempt", {
+            "attack_type": body.attack_name,
+            "blocked": research_metrics.get("violation", False),
+            "block_reason": research_metrics.get("block_reason"),
+            "jailbreak_score": research_metrics.get("jailbreak_score"),
+        })
+
         return {
             "attack_name": body.attack_name,
             "attack_prompt": attack_prompt,
@@ -138,6 +151,12 @@ async def score_prompt_endpoint(body: RunRequest):
         metrics = await score_prompt(
             app.state.http_client, GUARD_URL, body.custom_prompt
         )
+        log_event("prompt_score", {
+            "trust_score": metrics.get("trust_score"),
+            "violation": metrics.get("violation", False),
+            "prompt_length": len(body.custom_prompt),
+        })
+
         return {
             "metrics": metrics,
             "blocked": metrics.get("violation", False),
