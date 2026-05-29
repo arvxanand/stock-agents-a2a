@@ -1,6 +1,6 @@
 # Stock Agents A2A
 
-A multi-agent stock analysis pipeline built with the A2A (Agent-to-Agent) protocol and secured by [Tumeryk](https://tumeryk.com) Guard — an AI security layer that scores every message for jailbreaks, prompt injection, PII leakage, bias, and topic violations before it reaches an agent.
+A multi-agent stock analysis pipeline built with the A2A (Agent-to-Agent) protocol and secured by [Tumeryk](https://tumeryk.com) Guard: an AI security layer that scores every message for jailbreaks, prompt injection, PII leakage, bias, and topic violations before it reaches an agent.
 
 Every pipeline run, Guard decision, attack attempt, and trust score is recorded in Splunk Enterprise for real-time observability.
 
