@@ -196,6 +196,7 @@ cython_debug/
 .abstra/
 
 CLAUDE.md
+logs.md
 
 # Visual Studio Code
 #   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
