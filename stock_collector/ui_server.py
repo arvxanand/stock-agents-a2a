@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
 import uvicorn
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -47,6 +48,22 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 
+@app.middleware("http")
+async def request_log_middleware(request: Request, call_next):
+    _t0 = time.time()
+    response = await call_next(request)
+    duration_ms = round((time.time() - _t0) * 1000)
+    # only log API calls, not static assets or the root page
+    if request.url.path.startswith("/api/"):
+        log_event("request_log", {
+            "method": request.method,
+            "endpoint": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        })
+    return response
+
+
 class RunRequest(BaseModel):
     topic: str
     custom_prompt: str | None = None
@@ -68,10 +85,10 @@ async def run_research(body: RunRequest):
     if not body.topic.strip():
         return JSONResponse({"error": "No topic provided"}, status_code=400)
 
-    try:
-        run_id = uuid.uuid4().hex[:8]
-        log_event("pipeline_run", {"topic": body.topic, "run_id": run_id})
+    run_id = uuid.uuid4().hex[:8]
+    _t0 = time.time()
 
+    try:
         tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
 
         analysis, research_metrics, research_card = await call_agent(
@@ -80,6 +97,14 @@ async def run_research(body: RunRequest):
 
         if not analysis or not analysis.strip():
             analysis = "No analysis returned."
+
+        log_event("pipeline_run", {
+            "topic": body.topic,
+            "run_id": run_id,
+            "status": "success",
+            "duration_ms": round((time.time() - _t0) * 1000),
+            "ticker_count": len(parse_tickers(tickers)),
+        })
 
         return {
             "tickers": tickers,
@@ -91,6 +116,17 @@ async def run_research(body: RunRequest):
 
     except Exception as exc:
         logger.error(f"Pipeline error: {exc}")
+        log_event("pipeline_run", {
+            "topic": body.topic,
+            "run_id": run_id,
+            "status": "error",
+            "duration_ms": round((time.time() - _t0) * 1000),
+        })
+        log_event("app_error", {
+            "endpoint": "/api/run-research",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -109,6 +145,11 @@ async def run_decision(body: RunDecisionRequest):
 
     except Exception as exc:
         logger.error(f"Pipeline error: {exc}")
+        log_event("app_error", {
+            "endpoint": "/api/run-decision",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -139,6 +180,12 @@ async def run_attack(body: AttackRequest):
 
     except Exception as exc:
         logger.error(f"Attack pipeline error: {exc}")
+        log_event("app_error", {
+            "endpoint": "/api/attack",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "attack_type": body.attack_name,
+        })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 @app.post("/api/score-prompt")
@@ -164,6 +211,11 @@ async def score_prompt_endpoint(body: RunRequest):
 
     except Exception as exc:
         logger.error(f"Score prompt error: {exc}")
+        log_event("app_error", {
+            "endpoint": "/api/score-prompt",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 if __name__ == "__main__":

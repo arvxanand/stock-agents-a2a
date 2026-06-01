@@ -132,6 +132,12 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
         )
     except Exception as exc:
         logger.error(f"Failed to discover agent role={role}: {exc}")
+        log_event("app_error", {
+            "stage": "agent_discovery",
+            "agent_role": role,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        })
         return f"Error discovering agent: {exc}", {}, {}
 
     card_data = {
@@ -163,6 +169,12 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             break
     except Exception as exc:
         logger.error(f"Failed to call agent: {exc}")
+        log_event("app_error", {
+            "stage": "agent_call",
+            "agent_role": role,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+        })
         return f"Error calling agent: {exc}", {}, {}
 
     if isinstance(result, Task):

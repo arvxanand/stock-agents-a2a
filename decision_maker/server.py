@@ -10,6 +10,9 @@ import uvicorn
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "stock_collector"))
+from splunk_logger import log_event
+
 from a2a.server.apps import A2AStarletteApplication
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
@@ -88,6 +91,11 @@ class DecisionMakerExecutor(AgentExecutor):
 
         except Exception as exc:
             logger.error(f"Decision Maker failed: {exc}")
+            log_event("app_error", {
+                "stage": "decision_maker",
+                "error_type": type(exc).__name__,
+                "error_message": str(exc),
+            })
             await updater.update_status(
                 TaskState.failed,
                 new_agent_text_message(str(exc), task.context_id, task.id),
