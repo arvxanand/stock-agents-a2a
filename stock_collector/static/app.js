@@ -255,6 +255,7 @@ function renderDecision(recs, metrics) {
 
 const DEFAULT_PROMPT = `You are a stock market researcher. Given a topic or sector, identify 3 relevant stock tickers to analyze. Return ONLY a comma separated list of tickers.\nExample: AAPL, TSLA, NVDA`;
 let pendingAnalysis = null;
+let pendingRunId = null;
 let pendingTopic = null;
 let pendingTickers = null;
 let pendingParsedTickers = null;
@@ -420,6 +421,7 @@ async function runPipeline() {
     }
 
     pendingTopic = topic;
+    pendingRunId = data.run_id || null;
     pendingTickers = data.tickers;
     pendingParsedTickers = data.parsed_tickers;
     pendingResearchMetrics = data.research_metrics;
@@ -462,7 +464,7 @@ async function continuePipeline() {
     const res = await fetch('/api/run-decision', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({analysis: pendingAnalysis})
+      body: JSON.stringify({analysis: pendingAnalysis, run_id: pendingRunId})
     });
 
     if (!res.ok) {
@@ -487,6 +489,7 @@ async function continuePipeline() {
     log('Pipeline complete', 'success');
     saveRun(data.recommendations, data.decision_metrics, data.decision_card);
     pendingAnalysis = null;
+    pendingRunId = null;
 
   } catch(err) {
     log('Pipeline error: ' + err.message, 'error');

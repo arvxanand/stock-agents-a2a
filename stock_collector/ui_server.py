@@ -70,6 +70,7 @@ class RunRequest(BaseModel):
 
 class RunDecisionRequest(BaseModel):
     analysis: str
+    run_id: str | None = None
 
 class AttackRequest(BaseModel):
     attack_name: str
@@ -89,10 +90,22 @@ async def run_research(body: RunRequest):
     _t0 = time.time()
 
     try:
+        _t1 = time.time()
         tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
+        log_event("audit_log", {
+            "run_id": run_id,
+            "run_type": "normal",
+            "stage": "ticker_collection",
+            "input_text": body.topic,
+            "output_text": tickers,
+            "blocked": False,
+            "trust_score": None,
+            "latency_ms": round((time.time() - _t1) * 1000),
+        })
 
         analysis, research_metrics, research_card = await call_agent(
-            app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers
+            app.state.http_client, GUARD_URL, "ResearchAnalyst", tickers,
+            run_id=run_id, run_type="normal",
         )
 
         if not analysis or not analysis.strip():
@@ -107,6 +120,7 @@ async def run_research(body: RunRequest):
         })
 
         return {
+            "run_id": run_id,
             "tickers": tickers,
             "parsed_tickers": parse_tickers(tickers),
             "analysis": analysis,
@@ -134,7 +148,8 @@ async def run_research(body: RunRequest):
 async def run_decision(body: RunDecisionRequest):
     try:
         recommendations, decision_metrics, decision_card = await call_agent(
-            app.state.http_client, GUARD_URL, "DecisionMaker", body.analysis
+            app.state.http_client, GUARD_URL, "DecisionMaker", body.analysis,
+            run_id=body.run_id, run_type="normal",
         )
 
         return {
@@ -160,8 +175,10 @@ async def run_attack(body: AttackRequest):
         return JSONResponse({"error": f"Unknown attack: {body.attack_name}"}, status_code=400)
 
     try:
+        attack_run_id = uuid.uuid4().hex[:8]
         analysis, research_metrics, _ = await call_agent(
-            app.state.http_client, GUARD_URL, "ResearchAnalyst", attack_prompt
+            app.state.http_client, GUARD_URL, "ResearchAnalyst", attack_prompt,
+            run_id=attack_run_id, run_type="attack",
         )
 
         log_event("attack_attempt", {
@@ -194,8 +211,9 @@ async def score_prompt_endpoint(body: RunRequest):
         return JSONResponse({"error": "No prompt provided"}, status_code=400)
 
     try:
+        score_run_id = uuid.uuid4().hex[:8]
         metrics = await score_prompt(
-            app.state.http_client, GUARD_URL, body.custom_prompt
+            app.state.http_client, GUARD_URL, body.custom_prompt, run_id=score_run_id
         )
         log_event("prompt_score", {
             "trust_score": metrics.get("trust_score"),

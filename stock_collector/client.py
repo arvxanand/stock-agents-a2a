@@ -118,12 +118,12 @@ def parse_tickers(raw: str) -> list[dict]:
     print("DEBUG parse_tickers output:", results)
     return results
 
-async def score_prompt(http_client: httpx.AsyncClient, guard_base_url: str, prompt_text: str) -> dict:
+async def score_prompt(http_client: httpx.AsyncClient, guard_base_url: str, prompt_text: str, run_id: str | None = None) -> dict:
     """Send a prompt to Guard and return the trust metrics without running the full pipeline."""
-    _ , metrics, _ = await call_agent(http_client, guard_base_url, "ResearchAnalyst", prompt_text)
+    _ , metrics, _ = await call_agent(http_client, guard_base_url, "ResearchAnalyst", prompt_text, run_id=run_id, run_type="score")
     return metrics
 
-async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str) -> tuple[str, dict, dict]:
+async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: str, message_text: str, run_id: str | None = None, run_type: str = "normal") -> tuple[str, dict, dict]:
     resolver = A2ACardResolver(httpx_client=http_client, base_url=guard_base_url)
 
     try:
@@ -163,6 +163,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
     )
 
     _start = time.time()
+    result = None
     try:
         async for event in a2a_client.send_message(message):
             result = event[0] if isinstance(event, tuple) else event
@@ -176,6 +177,9 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             "error_message": str(exc),
         })
         return f"Error calling agent: {exc}", {}, {}
+
+    if result is None:
+        return "No response received from agent", {}, card_data
 
     if isinstance(result, Task):
         texts = []
@@ -216,22 +220,32 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             for artifact in result.artifacts:
                 for part in artifact.parts:
                     root = getattr(part, "root", part)
-                    if hasattr(root, "text") and root.text and root.text.strip():
-                        texts.append(root.text)
+                    if hasattr(root, "text") and isinstance(root.text, str) and root.text.strip():
+                        texts.append(root.text.strip())
+        _latency_ms = round((time.time() - _start) * 1000)
         log_event("guard_decision", {
+            "run_id": run_id,
+            "run_type": run_type,
             "stage": role,
             "blocked": metrics.get("violation", False),
             "block_reason": metrics.get("block_reason"),
             "jailbreak_score": metrics.get("jailbreak_score"),
             "bias_score": metrics.get("bias_input"),
             "trust_score": metrics.get("trust_score"),
-            "latency_ms": round((time.time() - _start) * 1000),
+            "latency_ms": _latency_ms,
         })
-
-        print("\n--- FULL METADATA ---")
-        import json
-        print(json.dumps((result.metadata), indent=2))
-        print("--- END METADATA ---\n")
+        log_event("audit_log", {
+            "run_id": run_id,
+            "run_type": run_type,
+            "stage": role,
+            "input_text": message_text,
+            "output_text": "\n".join(texts),
+            "blocked": metrics.get("violation", False),
+            "block_reason": metrics.get("block_reason"),
+            "trust_score": metrics.get("trust_score"),
+            "jailbreak_score": metrics.get("jailbreak_score"),
+            "latency_ms": _latency_ms,
+        })
 
         return "\n".join(texts) if texts else "No response received", metrics, card_data
 
