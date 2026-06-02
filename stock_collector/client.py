@@ -133,6 +133,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
     except Exception as exc:
         logger.error(f"Failed to discover agent role={role}: {exc}")
         log_event("app_error", {
+            "run_id": run_id,
             "stage": "agent_discovery",
             "agent_role": role,
             "error_type": type(exc).__name__,
@@ -171,6 +172,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
     except Exception as exc:
         logger.error(f"Failed to call agent: {exc}")
         log_event("app_error", {
+            "run_id": run_id,
             "stage": "agent_call",
             "agent_role": role,
             "error_type": type(exc).__name__,

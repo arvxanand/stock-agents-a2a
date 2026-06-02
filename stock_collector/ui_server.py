@@ -137,6 +137,7 @@ async def run_research(body: RunRequest):
             "duration_ms": round((time.time() - _t0) * 1000),
         })
         log_event("app_error", {
+            "run_id": run_id,
             "endpoint": "/api/run-research",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
@@ -161,6 +162,7 @@ async def run_decision(body: RunDecisionRequest):
     except Exception as exc:
         logger.error(f"Pipeline error: {exc}")
         log_event("app_error", {
+            "run_id": body.run_id,
             "endpoint": "/api/run-decision",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
@@ -182,10 +184,12 @@ async def run_attack(body: AttackRequest):
         )
 
         log_event("attack_attempt", {
+            "run_id": attack_run_id,
             "attack_type": body.attack_name,
             "blocked": research_metrics.get("violation", False),
             "block_reason": research_metrics.get("block_reason"),
             "jailbreak_score": research_metrics.get("jailbreak_score"),
+            "trust_score": research_metrics.get("trust_score"),
         })
 
         return {
@@ -198,6 +202,7 @@ async def run_attack(body: AttackRequest):
     except Exception as exc:
         logger.error(f"Attack pipeline error: {exc}")
         log_event("app_error", {
+            "run_id": attack_run_id,
             "endpoint": "/api/attack",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
@@ -230,6 +235,7 @@ async def score_prompt_endpoint(body: RunRequest):
     except Exception as exc:
         logger.error(f"Score prompt error: {exc}")
         log_event("app_error", {
+            "run_id": score_run_id,
             "endpoint": "/api/score-prompt",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
