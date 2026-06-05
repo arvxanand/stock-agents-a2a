@@ -18,7 +18,7 @@ import uuid
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from client import collect_tickers, call_agent, ATTACK_PROMPTS, score_prompt, parse_tickers
+from client import collect_tickers, call_agent, ATTACK_PROMPTS, score_prompt, parse_tickers, categorize_error
 from splunk_logger import log_event
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -91,7 +91,7 @@ async def run_research(body: RunRequest):
 
     try:
         _t1 = time.time()
-        tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt)
+        tickers = await collect_tickers(app.state.llm, app.state.model, body.topic, body.custom_prompt, run_id=run_id)
         log_event("audit_log", {
             "run_id": run_id,
             "run_type": "normal",
@@ -141,6 +141,7 @@ async def run_research(body: RunRequest):
             "endpoint": "/api/run-research",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_category": categorize_error(exc),
         })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -166,6 +167,7 @@ async def run_decision(body: RunDecisionRequest):
             "endpoint": "/api/run-decision",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_category": categorize_error(exc),
         })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -207,6 +209,7 @@ async def run_attack(body: AttackRequest):
             "error_type": type(exc).__name__,
             "error_message": str(exc),
             "attack_type": body.attack_name,
+            "error_category": categorize_error(exc),
         })
         return JSONResponse({"error": str(exc)}, status_code=500)
 
@@ -239,6 +242,7 @@ async def score_prompt_endpoint(body: RunRequest):
             "endpoint": "/api/score-prompt",
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_category": categorize_error(exc),
         })
         return JSONResponse({"error": str(exc)}, status_code=500)
 

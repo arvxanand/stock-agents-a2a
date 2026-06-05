@@ -25,6 +25,22 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
 logger = logging.getLogger("stock_collector")
 
+def categorize_error(exc: Exception, stage: str | None = None) -> str:
+    exc_type = type(exc).__name__.lower()
+    exc_msg = str(exc).lower()
+    if "timeout" in exc_type or "timeout" in exc_msg or "504" in exc_msg or "timed out" in exc_msg:
+        return "timeout"
+    if any(x in exc_type for x in ("connect", "network")) or \
+       any(x in exc_msg for x in ("connection refused", "unreachable", "dns")):
+        return "network_error"
+    if stage in ("agent_discovery", "agent_call"):
+        return "agent_error"
+    if any(x in exc_type for x in ("json", "decode", "value", "key", "parse")) or \
+       any(x in exc_msg for x in ("json", "decode", "parse")):
+        return "parse_error"
+    return "unknown"
+
+
 def decode_trust_credential(token: str) -> dict:
     """Decode the Tumeryk trust credential — handles both JWT and plain base64 JSON."""
     try:
@@ -55,7 +71,10 @@ ATTACK_PROMPTS = {
 }
 
 
-async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str, prompt=None) -> str:
+GPT4O_MINI_INPUT_COST_PER_TOKEN = 0.150 / 1_000_000
+GPT4O_MINI_OUTPUT_COST_PER_TOKEN = 0.600 / 1_000_000
+
+async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str, prompt=None, run_id: str | None = None) -> str:
     """Ask the LLM to identify relevant tickers for a given topic."""
     if prompt:
         system_prompt ="\n\nLimit to no more than 4 stocks." + prompt
@@ -72,6 +91,24 @@ async def collect_tickers(llm: AsyncOpenAI, model: str, topic: str, prompt=None)
     )
     tickers = response.choices[0].message.content or ""
     logger.info(f"Collected tickers: {tickers}")
+
+    usage = response.usage
+    if usage:
+        cost = round(
+            usage.prompt_tokens * GPT4O_MINI_INPUT_COST_PER_TOKEN +
+            usage.completion_tokens * GPT4O_MINI_OUTPUT_COST_PER_TOKEN,
+            8,
+        )
+        log_event("token_usage", {
+            "run_id": run_id,
+            "stage": "ticker_collection",
+            "model": model,
+            "input_tokens": usage.prompt_tokens,
+            "output_tokens": usage.completion_tokens,
+            "total_tokens": usage.total_tokens,
+            "estimated_cost_usd": cost,
+        })
+
     return tickers.strip()
 
 def parse_tickers(raw: str) -> list[dict]:
@@ -138,6 +175,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             "agent_role": role,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_category": categorize_error(exc, stage="agent_discovery"),
         })
         return f"Error discovering agent: {exc}", {}, {}
 
@@ -177,6 +215,7 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
             "agent_role": role,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_category": categorize_error(exc, stage="agent_call"),
         })
         return f"Error calling agent: {exc}", {}, {}
 
@@ -225,6 +264,26 @@ async def call_agent(http_client: httpx.AsyncClient, guard_base_url: str, role: 
                     if hasattr(root, "text") and isinstance(root.text, str) and root.text.strip():
                         texts.append(root.text.strip())
         _latency_ms = round((time.time() - _start) * 1000)
+
+        guard_usage = result.metadata.get("usage") or result.metadata.get("token_usage") if result.metadata else None
+        if guard_usage and isinstance(guard_usage, dict):
+            input_tok = guard_usage.get("prompt_tokens") or guard_usage.get("input_tokens", 0)
+            output_tok = guard_usage.get("completion_tokens") or guard_usage.get("output_tokens", 0)
+            cost = round(
+                input_tok * GPT4O_MINI_INPUT_COST_PER_TOKEN +
+                output_tok * GPT4O_MINI_OUTPUT_COST_PER_TOKEN,
+                8,
+            )
+            log_event("token_usage", {
+                "run_id": run_id,
+                "stage": role,
+                "model": "guard_proxy",
+                "input_tokens": input_tok,
+                "output_tokens": output_tok,
+                "total_tokens": input_tok + output_tok,
+                "estimated_cost_usd": cost,
+            })
+
         log_event("guard_decision", {
             "run_id": run_id,
             "run_type": run_type,
